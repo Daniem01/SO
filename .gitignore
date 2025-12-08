@@ -1,0 +1,16 @@
+# --- Binarios y Compilados de C ---
+*.o
+*.obj
+*.exe
+*.out
+*.so
+*.a
+
+# --- Archivos del Sistema y VS Code ---
+.DS_Store
+.vscode/
+*.log
+
+# --- Archivos temporales ---
+*~
+*.swp
