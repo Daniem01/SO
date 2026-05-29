@@ -6,14 +6,14 @@
 #define CAPACITY 5
 #define VIPSTR(vip) ((vip) ? "  vip  " : "not vip")
 
-// Variables globales para ver cuantos hay dentro y los vip que hay esperando.
-int count;
-int vip;
+// Variables globales compartidas
+int count; // Aforo actual
+int vip;   // Contador de VIPs haciendo cola 
 
-// Mutex y conditional
+// PRIMITIVAS DE SINCRONIZACIÓN 
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
-pthread_cond_t cond_normal = PTHREAD_COND_INITIALIZER;
-pthread_cond_t cond_vip = PTHREAD_COND_INITIALIZER;
+pthread_cond_t cond_normal = PTHREAD_COND_INITIALIZER; // Cola de normales
+pthread_cond_t cond_vip = PTHREAD_COND_INITIALIZER;    // Cola de VIPs
 
 // Struct de un cliente
 struct client
@@ -22,80 +22,85 @@ struct client
 	int isvip;
 };
 
+// FUNCIONES DE ACCESO AL RECURSO
 void enter_normal_client(int id)
 {
-	// Bloqueamos otros hilos con mutex
+	// Protocolo de entrada al monitor
 	pthread_mutex_lock(&mutex);
 
-	// Mientras no pueden entrar esperan
+	// Un normal no entra si la disco está llena 
+    // Miramos si hay vips esperando en la puerta 
 	while (count == CAPACITY || vip > 0)
 	{
+        // cond_wait suelta el mutex y duerme al hilo. Al despertar, recupera el mutex.
 		pthread_cond_wait(&cond_normal, &mutex);
 	}
 
-	// Ya puede entrar
 	count++;
 	printf("Cliente normal %d entra en la discoteca.\n", id);
 
-	// Liberamos hilo
+	// Protocolo de salida
 	pthread_mutex_unlock(&mutex);
 }
 
 void enter_vip_client(int id)
 {
-	// Bloqueamos el resto de hilos
 	pthread_mutex_lock(&mutex);
+    
+    // Sumamos 1 a los VIPs en cola antes del while
 	vip++;
 
-	// Mientras no pueden entrar esperan
+	// El VIP solo espera si la disco está llena. Le da igual si hay normales.
 	while (count == CAPACITY)
 	{
 		pthread_cond_wait(&cond_vip, &mutex);
 	}
 
-	// Puede entrar
 	count++;
-	vip--;
+	vip--; // Ya hemos entrado entonces dejamos de hacer cola
 	printf("Cliente vip %d entra en la discoteca.\n", id);
 
-	// Liberamos el hilo
 	pthread_mutex_unlock(&mutex);
 }
 
 void dance(int id, int isvip)
 {
+    // Esta función no lleva mutex porque no modifica variables globales.
+    // Cada hilo puede bailar en paralelo.
 	printf("Client %2d (%s) dancing in disco\n", id, VIPSTR(isvip));
 	sleep((rand() % 3) + 1);
 }
 
 void disco_exit(int id, int isvip)
 {
-	// Bloqueamos hilos
 	pthread_mutex_lock(&mutex);
 
-	// Sale cliente
+	// Sale el cliente y libera una plaza
 	count--;
 	printf("Cliente %d (%s) sale de la discoteca.\n", id, VIPSTR(isvip));
 
-	// Si hay vips esperando se avisa a los vips sino a los normales
+	// DESPERTAR A OTROS HILOS
+	// Si ha salido alguien hay un hueco libre. Miramos si hay vips con prioridad
 	if (vip > 0)
 	{
+        // Si hay algún VIP esperando, despertamos al VIP
 		pthread_cond_signal(&cond_vip);
 	}
 	else
 	{
+        // Solo si no hay VIP despertamos a un normal
 		pthread_cond_signal(&cond_normal);
 	}
 
-	// Desbloqueamos mutex
 	pthread_mutex_unlock(&mutex);
 }
 
+// FUNCIÓN PRINCIPAL DEL HILO
 void *client(void *arg)
 {
 	struct client *c = arg;
 
-	// Vemos quien mandamos entrar
+	// Lógica de ruteo
 	if (c->isvip)
 	{
 		enter_vip_client(c->id);
@@ -105,9 +110,10 @@ void *client(void *arg)
 		enter_normal_client(c->id);
 	}
 
-	// Baila y se va
 	dance(c->id, c->isvip);
 	disco_exit(c->id, c->isvip);
+    
+    return NULL; 
 }
 
 int main(int argc, char *argv[])

@@ -1,0 +1,28 @@
+Extender la implementación de la práctica 5 (disco.c) para incorporar un servicio de limpieza a la discoteca, que entrará a limpiarla cada vez que 3 nuevos usuarios (clientes de cualquier tipo) hayan estado en la discoteca.
+
+El servicio de limpieza de la discoteca se implementará como un nuevo hilo POSIX, que tendrá el siguiente comportamiento:
+
+C
+void* cleaning_thread (void* arg) {
+    while(1){
+        enter_cleaning();
+        //Limpiar la discoteca
+        printf("Cleaning...\n");
+        sleep(2);
+        printf("Done!\n");
+        exit_cleaning();
+    }
+    return NULL;
+}
+Por simplicidad, se aconseja mantener al menos una variable global extra llamada clean_pending que estará a 1 cuando el hilo de limpieza esté dentro de enter_cleaning() o bien esté llevando a cabo la limpieza en ese momento (no haya acabado aún).
+
+Al implementar las funciones enter_cleaning() y exit_cleaning() se han de cumplir las siguientes restricciones:
+
+enter_cleaning() bloqueará al servicio de limpieza hasta que al menos 3 clientes hayan estado en la discoteca desde la última limpieza efectuada. Análogamente, la función no retornará tampoco hasta que todos los clientes que ya estuvieran dentro de la discoteca la hayan abandonado.
+
+El sistema no debe permitir el acceso a la discoteca de ningún cliente esperando mientras:
+(i) la variable clean_pending esté a 1 y
+(ii) al menos 3 clientes hayan estado en la discoteca desde la última limpieza efectuada.
+Garantizar esta restricción implica modificar funciones del programa concurrente invocadas por los clientes.
+
+exit_cleaning() actualizará las variables pertinentes y despertará a los clientes esperando a entrar, respetando turnos y preferencia de los clientes vip frente a los normales.

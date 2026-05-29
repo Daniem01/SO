@@ -14,6 +14,7 @@ This repository focuses on **low-level interaction with the Linux Kernel**, util
 | **[p5-thread-sync](./p5-thread-sync)** | **Thread Synchronization** | Solving race conditions in multithreaded environments. <br> `pthread_mutex`, `pthread_cond_wait`, `monitors`. |
 | **[p6-ipc-mechanisms](./p6-ipc-mechanisms)** | **Inter-Process Communication (IPC)** | Synchronization between distinct processes using Shared Memory. <br> `sem_open`, `mmap`, `shm_open`, `sem_wait/post`. |
 | **[p7-linux-drivers](./p7-linux-drivers)** | **Kernel Modules** | Introduction to **Linux Device Drivers**, kernel space programming, and module insertion. |
+| **[exercises](./exercises)** | **Extra Practice** | Additional standalone system programming exercises. Currently includes `disco`. |
 
 ## 🛠️ Technologies & Tools
 
