@@ -4,102 +4,44 @@
 #include <ctype.h>
 #include <sys/types.h>
 #include <unistd.h>
-#include <sys/wait.h> // Para el waitpid
+#include <sys/wait.h> // IMPRESCINDIBLE para el wait/waitpid
 
 extern char *optarg; // Para poder usar optarg de getopt
 
 pid_t launch_command(char **argv)
 {
     pid_t pid;
+    
+    // fork() clona el proceso actual
     pid = fork();
 
     int s = 0;
 
-    // Vemos si somos el hijo
+    // FLUJO DEL HIJO
     if (pid == 0)
     {
-        if ((s = execvp(argv[0], argv) == -1))
-        {
+        // Las funciones exec REEMPLAZAN la imagen de memoria del proceso 
+        // Si tienen éxito el código que haya debajo NUNCA se ejecuta
+        // execvp busca el ejecutable en el PATH. Necesita el nombre (argv) y el array completo (argv).
+        // El array argv DEBE terminar en NULL
+        if (execvp(argv[0], argv) == -1) {
             perror("Error realizando execvp.");
             exit(EXIT_FAILURE);
         }
         return 0;
     }
-    // Vemos is somos el padre
+    // FLUJO DEL PADRE
     else if (pid > 0)
     {
+        // El padre simplemente retorna el PID del hijo que acaba de crear.
         return pid;
     }
-    // Error
+    // FLUJO DE ERROR
     else
     {
-        fprintf(stderr, "Error al hacer fork.");
+        perror("Error al hacer fork.");
         return -1;
     }
-}
-
-char **parse_command(const char *cmd, int *argc)
-{
-    // Allocate space for the argv array (initially with space for 10 args)
-    size_t argv_size = 10;
-    const char *end;
-    size_t arg_len;
-    int arg_count = 0;
-    const char *start = cmd;
-    char **argv = malloc(argv_size * sizeof(char *));
-
-    if (argv == NULL)
-    {
-        perror("malloc");
-        exit(EXIT_FAILURE);
-    }
-
-    while (*start && isspace(*start))
-        start++; // Skip leading spaces
-
-    while (*start)
-    {
-        // Reallocate more space if needed
-        if (arg_count >= argv_size - 1)
-        { // Reserve space for the NULL at the end
-            argv_size *= 2;
-            argv = realloc(argv, argv_size * sizeof(char *));
-            if (argv == NULL)
-            {
-                perror("realloc");
-                exit(EXIT_FAILURE);
-            }
-        }
-
-        // Find the start of the next argument
-        end = start;
-        while (*end && !isspace(*end))
-            end++;
-
-        // Allocate space and copy the argument
-        arg_len = end - start;
-        argv[arg_count] = malloc(arg_len + 1);
-
-        if (argv[arg_count] == NULL)
-        {
-            perror("malloc");
-            exit(EXIT_FAILURE);
-        }
-        strncpy(argv[arg_count], start, arg_len);
-        argv[arg_count][arg_len] = '\0'; // Null-terminate the argument
-        arg_count++;
-
-        // Move to the next argument, skipping spaces
-        start = end;
-        while (*start && isspace(*start))
-            start++;
-    }
-
-    argv[arg_count] = NULL; // Null-terminate the array
-
-    (*argc) = arg_count; // Return argc
-
-    return argv;
 }
 
 int main(int argc, char *argv[])
@@ -112,7 +54,9 @@ int main(int argc, char *argv[])
     FILE *fp;
     char line[256];
 
-    // Miramos que accion realizamos
+    // PROCESAMIENTO DE ARGUMENTOS CON GETOPT
+    // Los dos puntos indican que requieren un argumento extra
+    // optarg es una variable global de getopt que guarda ese argumento extra
     while ((opt = getopt(argc, argv, "x:s:")) != -1)
     {
         switch (opt)
@@ -120,36 +64,47 @@ int main(int argc, char *argv[])
         case 'x':
             cmd_argv = parse_command(optarg, &cmd_argc);
             pid = launch_command(cmd_argv);
+            
+            // ESPERA DEL PROCESO HIJO 
+            // waitpid espera específicamente al PID que le pasamos.
+            // Pasamos NULL porque no nos importa cómo murio
+            // Lo logico seria pasar una variable &status y usar WIFEXITED(status) y WEXITSTATUS(status).
             waitpid(pid, NULL, 0);
-            // Limpiamos la memoria
+
+            // LIMPIEZA DE MEMORIA
+            // Como parse_command usa malloc internamente hay que liberar cada string y el array
             for (i = 0; cmd_argv[i] != NULL; i++)
             {
                 free(cmd_argv[i]);
             }
             free(cmd_argv);
             break;
+
         case 's':
+            // APERTURA DE FICHEROS
+            // fopen con "r" abre en modo lectura
             if ((fp = fopen(optarg, "r")) == NULL)
             {
                 perror("Error abriendo el fichero");
                 return EXIT_FAILURE;
             }
-            // Leer línea a línea
+            
+            // LECTURA LÍNEA A LÍNEA
+            // Usar fgets es la forma más segura de leer líneas enteras
+            // Leemos como máximo sizeof(line) para evitar desbordamientos de memoria
+            // Devuelve NULL cuando llega al final del fichero
             while (fgets(line, sizeof(line), fp) != NULL)
             {
-                // Parseamos la línea leída
                 cmd_argv = parse_command(line, &cmd_argc);
-
-                // Si la línea está vacía, saltamos
-                if (cmd_argv[0] == NULL)
+                if (cmd_argv == NULL)
                 {
                     free(cmd_argv);
-                    continue;
+                    continue; 
                 }
-
-                // Lanzamos el comando
+                // Lanzamos el proceso hijo
                 pid = launch_command(cmd_argv);
 
+                // Esperamos a que termine antes de lanzar el siguiente
                 waitpid(pid, NULL, 0);
 
                 // Limpiamos la memoria
@@ -160,10 +115,11 @@ int main(int argc, char *argv[])
                 free(cmd_argv);
             }
 
-            // Cerramos el fichero
+            // CIERRE DEl FICHERO
             fclose(fp);
             break;
-        // Por defecto tratamos si hay error
+
+        // Si el usuario mete una opción que no es -x ni -s
         default:
             fprintf(stderr, "Error trabajando el argumento.");
         }
